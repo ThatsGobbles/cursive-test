@@ -51,6 +51,24 @@ fn delete_name(s: &mut Cursive) {
     };
 }
 
+fn delete_all_names(s: &mut Cursive) {
+    let select = s.find_id::<SelectView<String>>(ID_NAME_SELECTOR).unwrap();
+
+    if !select.is_empty() {
+        let dialog = Dialog::text("Are you sure you want to delete all entries?")
+            .title("Confirm")
+            .button("Ok", move |s| {
+                let mut select = s.find_id::<SelectView<String>>(ID_NAME_SELECTOR).unwrap();
+                select.clear();
+                s.pop_layer();
+            })
+            .button("Cancel", |s| { s.pop_layer(); })
+        ;
+
+        s.add_layer(dialog);
+    }
+}
+
 fn on_submit(s: &mut Cursive, name: &String) {
     s.pop_layer();
 
@@ -67,12 +85,13 @@ fn profile_example() {
         .on_submit(on_submit)
         .with_id(ID_NAME_SELECTOR)
         .scrollable()
-        .fixed_size((10, 5))
+        .fixed_size((20, 10))
     ;
 
     let buttons = LinearLayout::vertical()
         .child(Button::new("Add new", add_name))
         .child(Button::new("Delete", delete_name))
+        .child(Button::new("Delete all", delete_all_names))
         .child(DummyView)
         .child(Button::new("Quit", Cursive::quit))
     ;
