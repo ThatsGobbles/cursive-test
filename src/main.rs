@@ -8,6 +8,7 @@ use cursive::views::EditView;
 use cursive::traits::Boxable;
 use cursive::traits::Identifiable;
 use cursive::traits::Scrollable;
+use cursive::immut1;
 
 const ID_NAME_EDITOR: &str = "ID_NAME_EDITOR";
 const ID_NAME_SELECTOR: &str = "ID_NAME_SELECTOR";
@@ -46,26 +47,40 @@ fn delete_name(s: &mut Cursive) {
     let mut select = s.find_id::<SelectView<String>>(ID_NAME_SELECTOR).unwrap();
 
     match select.selected_id() {
-        None => s.add_layer(Dialog::info("No name to remove")),
-        Some(focus) => { select.remove_item(focus); },
+        None => s.add_layer(Dialog::info("No names to remove")),
+        Some(focus) => {
+            let msg = format!("Are you sure you want to delete entry '{}'?",
+                select.get_item(focus).unwrap().0);
+
+            let dialog = Dialog::text(msg)
+                .button("Cancel", |s| { s.pop_layer(); })
+                .button("Ok", immut1!(move |s: &mut Cursive| {
+                    select.remove_item(focus);
+                    s.pop_layer();
+                }))
+            ;
+
+            s.add_layer(dialog);
+        },
     };
 }
 
 fn delete_all_names(s: &mut Cursive) {
-    let select = s.find_id::<SelectView<String>>(ID_NAME_SELECTOR).unwrap();
+    let mut select = s.find_id::<SelectView<String>>(ID_NAME_SELECTOR).unwrap();
 
     if !select.is_empty() {
         let dialog = Dialog::text("Are you sure you want to delete all entries?")
-            .title("Confirm")
-            .button("Ok", move |s| {
-                let mut select = s.find_id::<SelectView<String>>(ID_NAME_SELECTOR).unwrap();
+            .button("Cancel", |s| { s.pop_layer(); })
+            .button("Ok", immut1!(move |s: &mut Cursive| {
                 select.clear();
                 s.pop_layer();
-            })
-            .button("Cancel", |s| { s.pop_layer(); })
+            }))
         ;
 
         s.add_layer(dialog);
+    }
+    else {
+        s.add_layer(Dialog::info("No names to remove"));
     }
 }
 
