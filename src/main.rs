@@ -1,7 +1,8 @@
 pub mod examples;
 
 use examples::custom;
+use examples::progress;
 
 fn main() {
-    custom::run();
+    progress::run();
 }
