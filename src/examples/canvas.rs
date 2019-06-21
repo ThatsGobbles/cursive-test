@@ -28,9 +28,9 @@ const BLOCK_L_6_8: char = '▊';
 const BLOCK_L_7_8: char = '▉';
 const BLOCK_L_8_8: char = BLOCK_B_8_8;
 
-const RESOLUTION: usize = 8;
-const MAX_BAR_WIDTH: usize = 100;
-const MAX_BAR_TICKS: usize = RESOLUTION * MAX_BAR_WIDTH;
+const MAX_BAR_LENGTH: usize = 200;
+const MAX_BAR_LENGTH_EIGHTHS: usize = MAX_BAR_LENGTH * 8;
+const MAX_BAR_TICKS: usize = 1000;
 
 fn get_l_char(offset: usize) -> char {
     match offset {
@@ -48,8 +48,8 @@ fn get_l_char(offset: usize) -> char {
 }
 
 fn gen_l_r_bar(logical_len: usize) -> Vec<char> {
-    let int = logical_len / RESOLUTION;
-    let rem = logical_len % RESOLUTION;
+    let int = logical_len / 8;
+    let rem = logical_len % 8;
 
     let num_chars = if rem == 0 { int } else { int + 1 };
 
@@ -61,12 +61,27 @@ fn gen_l_r_bar(logical_len: usize) -> Vec<char> {
     chars
 }
 
+fn ease_out_bounce(t: f64) -> f64 {
+    let t = t.clamp(0.0, 1.0);
+    const A: f64 = 7.5625;
+
+    let (t_off, a_off) =
+        if t < 1.0 / 2.75 { (0.0, 0.0) }
+        else if t < 2.0 / 2.75 { (1.5 / 2.75, 0.75) }
+        else if t < 2.5 / 2.75 { (2.25 / 2.75, 0.9375) }
+        else { (2.625 / 2.75, 0.984375) }
+    ;
+
+    let tt = t - t_off;
+    (A * tt * tt) + a_off
+}
+
 #[derive(Copy, Clone)]
 struct RGB(u8, u8, u8);
 
 impl RGB {
     fn interpolate(&self, other: &RGB, f: f64) -> RGB {
-        assert!(f >= 0.0 && f <= 1.0);
+        let f = f.clamp(0.0, 1.0);
         let o_f = f;
         let i_f = 1.0 - f;
         RGB(
@@ -106,13 +121,18 @@ fn build_spectrum_view(model: Model, size: Vec2) -> impl cursive::view::View {
         .with_draw(|model, printer| {
             let model = model.lock().unwrap();
 
-            let chars = gen_l_r_bar(model.num_ticks);
+            let linear_t = model.num_ticks as f64 / MAX_BAR_TICKS as f64;
+            let t = ease_out_bounce(linear_t);
+            let num_eighths = (MAX_BAR_LENGTH_EIGHTHS as f64 * t).round() as usize;
+
+            let chars = gen_l_r_bar(num_eighths);
             let num_chars = chars.len();
 
             for (i, ch) in chars.into_iter().enumerate() {
-                let factor = i as f64 / ((MAX_BAR_WIDTH - 1) as f64);
                 let s = ch.to_string();
-                printer.print((1, 1), &format!("{}, {}, {}", i, MAX_BAR_WIDTH - 1, num_chars));
+                printer.print_hline((1, 1), 1000, " ");
+                // printer.print((1, 1), &format!("{}, {}, {}, {}", i, MAX_BAR_WIDTH - 1, factor, num_chars));
+                let factor = i as f64 / ((MAX_BAR_LENGTH - 1) as f64);
                 printer.with_color(C_A.interpolate(&C_B, factor).into(), |p| p.print((i, 10), &s));
             }
         })
@@ -131,9 +151,9 @@ fn begin_counting(model: Model) {
                     .cb_sink
                     .send(Box::new(cursive::Cursive::noop))
                     .unwrap();
-                if model.num_ticks > MAX_BAR_TICKS { break; }
+                if model.num_ticks >= MAX_BAR_TICKS { break; }
             }
-            std::thread::sleep_ms(5);
+            std::thread::sleep_ms(1);
         }
     });
 }
