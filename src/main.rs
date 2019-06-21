@@ -1,3 +1,5 @@
+#![feature(const_fn)]
+
 pub mod examples;
 
 // use examples::custom as x;
