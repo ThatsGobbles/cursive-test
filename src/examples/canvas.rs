@@ -11,63 +11,63 @@ use cursive::theme::ColorType;
 use cursive::theme::ColorStyle;
 use cursive::theme::PaletteColor;
 
-// const BLOCK_B_0_8: char = ' ';
-// const BLOCK_B_1_8: char = '▁';
-// const BLOCK_B_2_8: char = '▂';
-// const BLOCK_B_3_8: char = '▃';
-// const BLOCK_B_4_8: char = '▄';
-// const BLOCK_B_5_8: char = '▅';
-// const BLOCK_B_6_8: char = '▆';
-// const BLOCK_B_7_8: char = '▇';
-// const BLOCK_B_8_8: char = '█';
-
-// const BLOCK_L_0_8: char = ' ';
-const BLOCK_L_1_8: char = '▏';
-const BLOCK_L_2_8: char = '▎';
-const BLOCK_L_3_8: char = '▍';
-const BLOCK_L_4_8: char = '▌';
-const BLOCK_L_5_8: char = '▋';
-const BLOCK_L_6_8: char = '▊';
-const BLOCK_L_7_8: char = '▉';
-const BLOCK_L_8_8: char = '█';
-
 const MAX_BAR_LENGTH: usize = 200;
-const MAX_BAR_LENGTH_EIGHTHS: usize = MAX_BAR_LENGTH * 8;
-const MAX_BAR_TICKS: usize = 1000;
-
-const GRAD_COLOR_1_R: u8 = 0xbd;
-const GRAD_COLOR_1_G: u8 = 0xc3;
-const GRAD_COLOR_1_B: u8 = 0xc7;
-const GRAD_COLOR_2_R: u8 = 0x2c;
-const GRAD_COLOR_2_G: u8 = 0x3e;
-const GRAD_COLOR_2_B: u8 = 0x50;
 
 const GRAD_COLOR_1: RGB = (0xbd, 0xc3, 0xc7);
 const GRAD_COLOR_2: RGB = (0x2c, 0x3e, 0x50);
 
-fn gen_l_r_bar(logical_len: usize) -> Vec<char> {
-    let int = logical_len / 8;
-    let rem = logical_len % 8;
+const DEFAULT_EASING: Easing = Easing::QuadraticEaseOut;
 
-    let num_chars = if rem == 0 { int } else { int + 1 };
+#[derive(Copy, Clone)]
+enum Easing {
+    Linear,
+    BounceOut,
+    Oscillate,
+    QuadraticEaseIn,
+    QuadraticEaseOut,
+}
 
-    let mut chars = Vec::<char>::with_capacity(num_chars);
+impl Easing {
+    pub fn pos(&self, step: usize, max_steps: usize) -> usize {
+        let step = step.min(max_steps);
 
-    for _ in 0..int { chars.push(BLOCK_L_8_8); }
-    let tail_char = match rem {
-        1 => BLOCK_L_1_8,
-        2 => BLOCK_L_2_8,
-        3 => BLOCK_L_3_8,
-        4 => BLOCK_L_4_8,
-        5 => BLOCK_L_5_8,
-        6 => BLOCK_L_6_8,
-        7 => BLOCK_L_7_8,
-        _ => { return chars },
-    };
+        if max_steps == 0 { 0 }
+        else {
+            match self {
+                &Easing::Linear => step,
+                &Easing::BounceOut => {
+                    let t = step as f64 / max_steps as f64;
 
-    chars.push(tail_char);
+                    let (t_off, a_off) =
+                        if t < 1.0 / 2.75 { (0.0, 0.0) }
+                        else if t < 2.0 / 2.75 { (1.5 / 2.75, 0.75) }
+                        else if t < 2.5 / 2.75 { (2.25 / 2.75, 0.9375) }
+                        else { (2.625 / 2.75, 0.984375) }
+                    ;
 
-    chars
+                    let tt = t - t_off;
+                    let f = (7.5625 * tt * tt) + a_off;
+
+                    (max_steps as f64 * f).round() as usize
+                },
+                &Easing::Oscillate => {
+                    let t = step as f64 / max_steps as f64;
+                    let f = (t + (8.0 * std::f64::consts::PI * t).sin() / 16.0).clamp(0.0, 1.0);
+
+                    (max_steps as f64 * f).round() as usize
+                },
+                &Easing::QuadraticEaseIn => {
+                    let t = step as f64 / max_steps as f64;
+                    (max_steps as f64 * t * t).round() as usize
+                },
+                &Easing::QuadraticEaseOut => {
+                    let t = step as f64 / max_steps as f64;
+                    let f = (1.0 - t).clamp(0.0, 1.0);
+                    (max_steps as f64 * (1.0 - (f * f))).round() as usize
+                },
+            }
+        }
+    }
 }
 
 type RGB = (u8, u8, u8);
@@ -284,104 +284,11 @@ impl IntoIterator for GradientBlockLine {
     }
 }
 
-// impl Iterator for GradientBlockIter {
-//     type Item = GradientBlock;
-
-//     fn next(&mut self) -> Option<Self::Item> {
-//         let max_ticks = self.max_blocks * 8;
-
-//         if self.curr_ticks < max_ticks {
-//             let curr_blocks = (self.curr_ticks / 8) + if self.curr_ticks % 8 == 0 { 0 } else { 1 };
-
-//             // See if we need to interpolate a color gradient.
-//             let color_style =
-//                 if self.fg_color_a == self.fg_color_b {
-//                     ColorStyle{
-//                         front: ColorType::Color(Color::Rgb(self.fg_color_a.0, self.fg_color_a.1, self.fg_color_a.2)),
-//                         back: ColorType::Palette(PaletteColor::View),
-//                     }
-//                 }
-//                 else {
-//                     // Colors are always interpolated linearly, and by number of blocks, not by number of ticks.
-//                     let grad_color = interpolate_rgb(self.fg_color_a, self.fg_color_b, curr_blocks, self.max_blocks);
-//                     ColorStyle{
-//                         front: ColorType::Color(Color::Rgb(grad_color.0, grad_color.1, grad_color.2)),
-//                         back: ColorType::Palette(PaletteColor::View),
-//                     }
-//                 }
-//             ;
-//             self.curr_ticks += 1;
-//             None
-//         }
-//         else { None }
-//     }
-// }
-
-#[derive(Copy, Clone)]
-enum Easing {
-    Linear,
-    BounceOut,
-}
-
-impl Easing {
-    pub fn pos(&self, step: usize, max_steps: usize) -> usize {
-        let step = step.min(max_steps);
-
-        if max_steps == 0 { 0 }
-        else {
-            match self {
-                &Easing::Linear => step,
-                &Easing::BounceOut => {
-                    let t = step as f64 / max_steps as f64;
-                    const A: f64 = 7.5625;
-
-                    let (t_off, a_off) =
-                        if t < 1.0 / 2.75 { (0.0, 0.0) }
-                        else if t < 2.0 / 2.75 { (1.5 / 2.75, 0.75) }
-                        else if t < 2.5 / 2.75 { (2.25 / 2.75, 0.9375) }
-                        else { (2.625 / 2.75, 0.984375) }
-                    ;
-
-                    let tt = t - t_off;
-                    let f = (A * tt * tt) + a_off;
-
-                    (step as f64 * f).round() as usize
-                },
-            }
-        }
-    }
-}
-
-// fn ease_out_bounce(t: f64) -> f64 {
-//     let t = t.clamp(0.0, 1.0);
-//     const A: f64 = 7.5625;
-
-//     let (t_off, a_off) =
-//         if t < 1.0 / 2.75 { (0.0, 0.0) }
-//         else if t < 2.0 / 2.75 { (1.5 / 2.75, 0.75) }
-//         else if t < 2.5 / 2.75 { (2.25 / 2.75, 0.9375) }
-//         else { (2.625 / 2.75, 0.984375) }
-//     ;
-
-//     let tt = t - t_off;
-//     (A * tt * tt) + a_off
-// }
-
-fn osc_increase(t: f64) -> f64 {
-    let t = t.clamp(0.0, 1.0);
-    (t + (12.0 * std::f64::consts::PI * t).sin() / 24.0).clamp(0.0, 1.0)
-}
-
-fn interpolate_u8s(a: u8, b: u8, f: f64) -> u8 {
-    let f = f.clamp(0.0, 1.0);
-    ((1.0 - f) * a as f64 + f * b as f64).round() as u8
-}
-
 struct ModelData {
     /// A callback sink is used to control the UI from the server
     /// (eg. force refresh, error popups)
     cb_sink: cursive::CbSink,
-    num_ticks: usize,
+    lin_ticks: usize,
 }
 
 type Model = Arc<Mutex<ModelData>>;
@@ -391,20 +298,15 @@ fn build_spectrum_view(model: Model, size: Vec2) -> impl cursive::view::View {
         .with_draw(|model, printer| {
             let model = model.lock().unwrap();
 
+            let eased_ticks = DEFAULT_EASING.pos(model.lin_ticks, MAX_BAR_LENGTH * 8);
+
             let line = GradientBlockLine::new(
-                TickSpan::from_ticks(model.num_ticks),
+                TickSpan::from_ticks(eased_ticks),
                 MAX_BAR_LENGTH,
                 Direction::Right,
                 GRAD_COLOR_1,
                 GRAD_COLOR_2,
             );
-
-            let linear_t = model.num_ticks as f64 / MAX_BAR_TICKS as f64;
-            // let t = ease_out_bounce(linear_t);
-            let t = osc_increase(linear_t);
-            let num_eighths = (MAX_BAR_LENGTH_EIGHTHS as f64 * t).round() as usize;
-
-            let chars = gen_l_r_bar(num_eighths);
 
             for (i, (bc, cs)) in line.into_iter().enumerate() {
                 printer.with_color(
@@ -412,20 +314,6 @@ fn build_spectrum_view(model: Model, size: Vec2) -> impl cursive::view::View {
                     |p| p.print((i, 0), bc.into()),
                 );
             }
-
-            // for (i, ch) in chars.into_iter().enumerate() {
-            //     let s = ch.to_string();
-            //     let factor = i as f64 / ((MAX_BAR_LENGTH - 1) as f64);
-
-            //     let c_r = interpolate_u8s(GRAD_COLOR_1_R, GRAD_COLOR_2_R, factor);
-            //     let c_g = interpolate_u8s(GRAD_COLOR_1_G, GRAD_COLOR_2_G, factor);
-            //     let c_b = interpolate_u8s(GRAD_COLOR_1_B, GRAD_COLOR_2_B, factor);
-
-            //     printer.with_color(
-            //         Color::Rgb(c_r, c_g, c_b).into(),
-            //         |p| p.print((i, 0), &s),
-            //     );
-            // }
         })
         // The required size will be set by the window layout, not by the printer!
         .with_required_size(move |_model, _req_size| size)
@@ -437,14 +325,14 @@ fn begin_counting(model: Model) {
         loop {
             {
                 let mut model = model.lock().unwrap();
-                model.num_ticks += 1;
+                if model.lin_ticks > MAX_BAR_LENGTH * 8 { break; }
                 model
                     .cb_sink
                     .send(Box::new(cursive::Cursive::noop))
                     .unwrap();
-                // if model.num_ticks >= MAX_BAR_TICKS { break; }
+                model.lin_ticks += 1;
             }
-            std::thread::sleep(Duration::from_millis(2));
+            std::thread::sleep(Duration::from_millis(5));
         }
     });
 }
@@ -457,7 +345,7 @@ pub fn run() {
     // Build a shared model
     let model = Arc::new(Mutex::new(ModelData {
         cb_sink: siv.cb_sink().clone(),
-        num_ticks: 0,
+        lin_ticks: 0,
     }));
 
     // Build the UI from the model
