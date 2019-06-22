@@ -42,6 +42,9 @@ const GRAD_COLOR_2_R: u8 = 0x2c;
 const GRAD_COLOR_2_G: u8 = 0x3e;
 const GRAD_COLOR_2_B: u8 = 0x50;
 
+const GRAD_COLOR_1: RGB = (0xbd, 0xc3, 0xc7);
+const GRAD_COLOR_2: RGB = (0x2c, 0x3e, 0x50);
+
 fn gen_l_r_bar(logical_len: usize) -> Vec<char> {
     let int = logical_len / 8;
     let rem = logical_len % 8;
@@ -188,42 +191,26 @@ enum Direction { Right, Up, /* Left, Down, */ }
 #[derive(Copy, Clone)]
 enum TipSmoothing { PartialBlocks, Fade }
 
-struct GradientBlockLine(Vec<(BlockChar, ColorStyle)>);
-
 struct BlockLine(Vec<BlockChar>);
 
 impl BlockLine {
-    pub fn new(curr_blocks: usize, rem: Remainder, max_blocks: usize, direction: Direction) -> Self {
-        if curr_blocks >= max_blocks {
+    pub fn new(ts: TickSpan, max_blocks: usize, direction: Direction) -> Self {
+        if ts.0 >= max_blocks {
             Self(vec![BlockChar::FF; max_blocks])
-        } else if curr_blocks == 0 && rem == Remainder::E0 {
+        } else if ts.0 == 0 && ts.1 == Remainder::E0 {
             Self(vec![BlockChar::NL; max_blocks])
         } else {
             let mut blocks = Vec::<BlockChar>::with_capacity(max_blocks);
 
-            for _ in 0..curr_blocks { blocks.push(BlockChar::FF); }
-            blocks.push(BlockChar::from((rem, Direction::Right)));
-            for _ in 0..(max_blocks - curr_blocks - 1) { blocks.push(BlockChar::NL); }
+            for _ in 0..ts.0 { blocks.push(BlockChar::FF); }
+            blocks.push(BlockChar::from((ts.1, direction)));
+            for _ in 0..(max_blocks - ts.0 - 1) { blocks.push(BlockChar::NL); }
+
+            assert_eq!(max_blocks, blocks.len());
 
             Self(blocks)
         }
     }
-}
-
-struct GradientBlockGen {
-    fg_color_a: RGB,
-    fg_color_b: Option<RGB>,
-    max_char_len: usize,
-    direction: Direction,
-}
-
-struct GradientBlockIter {
-    fg_color_a: RGB,
-    fg_color_b: RGB,
-    direction: Direction,
-    curr_ticks: usize,
-    max_blocks: usize,
-    tip_smoothing: TipSmoothing,
 }
 
 fn interpolate_rgb(rgb_a: RGB, rgb_b: RGB, curr: usize, max: usize) -> RGB {
@@ -266,6 +253,34 @@ impl Iterator for GradientColorIter {
             self.curr_step += 1;
             ret
         } else { None }
+    }
+}
+
+struct GradientBlockLine(Vec<(BlockChar, ColorStyle)>);
+
+impl GradientBlockLine {
+    pub fn new(ts: TickSpan, max_blocks: usize, direction: Direction, color_a: RGB, color_b: RGB) -> Self {
+        let gradient_color_iter =
+            GradientColorIter::new(color_a, color_b, max_blocks)
+            .map(|rgb| {
+                ColorStyle {
+                    front: ColorType::Color(Color::Rgb(rgb.0, rgb.1, rgb.2)),
+                    back: ColorType::Palette(PaletteColor::View),
+                }
+            })
+        ;
+        let block_line = BlockLine::new(ts, max_blocks, direction);
+
+        Self(block_line.0.into_iter().zip(gradient_color_iter).collect())
+    }
+}
+
+impl IntoIterator for GradientBlockLine {
+    type Item = (BlockChar, ColorStyle);
+    type IntoIter = ::std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
 
@@ -376,6 +391,14 @@ fn build_spectrum_view(model: Model, size: Vec2) -> impl cursive::view::View {
         .with_draw(|model, printer| {
             let model = model.lock().unwrap();
 
+            let line = GradientBlockLine::new(
+                TickSpan::from_ticks(model.num_ticks),
+                MAX_BAR_LENGTH,
+                Direction::Right,
+                GRAD_COLOR_1,
+                GRAD_COLOR_2,
+            );
+
             let linear_t = model.num_ticks as f64 / MAX_BAR_TICKS as f64;
             // let t = ease_out_bounce(linear_t);
             let t = osc_increase(linear_t);
@@ -383,19 +406,26 @@ fn build_spectrum_view(model: Model, size: Vec2) -> impl cursive::view::View {
 
             let chars = gen_l_r_bar(num_eighths);
 
-            for (i, ch) in chars.into_iter().enumerate() {
-                let s = ch.to_string();
-                let factor = i as f64 / ((MAX_BAR_LENGTH - 1) as f64);
-
-                let c_r = interpolate_u8s(GRAD_COLOR_1_R, GRAD_COLOR_2_R, factor);
-                let c_g = interpolate_u8s(GRAD_COLOR_1_G, GRAD_COLOR_2_G, factor);
-                let c_b = interpolate_u8s(GRAD_COLOR_1_B, GRAD_COLOR_2_B, factor);
-
+            for (i, (bc, cs)) in line.into_iter().enumerate() {
                 printer.with_color(
-                    Color::Rgb(c_r, c_g, c_b).into(),
-                    |p| p.print((i, 0), &s),
+                    cs,
+                    |p| p.print((i, 0), bc.into()),
                 );
             }
+
+            // for (i, ch) in chars.into_iter().enumerate() {
+            //     let s = ch.to_string();
+            //     let factor = i as f64 / ((MAX_BAR_LENGTH - 1) as f64);
+
+            //     let c_r = interpolate_u8s(GRAD_COLOR_1_R, GRAD_COLOR_2_R, factor);
+            //     let c_g = interpolate_u8s(GRAD_COLOR_1_G, GRAD_COLOR_2_G, factor);
+            //     let c_b = interpolate_u8s(GRAD_COLOR_1_B, GRAD_COLOR_2_B, factor);
+
+            //     printer.with_color(
+            //         Color::Rgb(c_r, c_g, c_b).into(),
+            //         |p| p.print((i, 0), &s),
+            //     );
+            // }
         })
         // The required size will be set by the window layout, not by the printer!
         .with_required_size(move |_model, _req_size| size)
@@ -412,7 +442,7 @@ fn begin_counting(model: Model) {
                     .cb_sink
                     .send(Box::new(cursive::Cursive::noop))
                     .unwrap();
-                if model.num_ticks >= MAX_BAR_TICKS { break; }
+                // if model.num_ticks >= MAX_BAR_TICKS { break; }
             }
             std::thread::sleep(Duration::from_millis(2));
         }
