@@ -13,13 +13,13 @@ use cursive::theme::PaletteColor;
 
 const MAX_BAR_LENGTH: usize = 200;
 
-const GRAD_COLOR_1: RGB = (0xbd, 0xc3, 0xc7);
-const GRAD_COLOR_2: RGB = (0x2c, 0x3e, 0x50);
+const GRAD_COLOR_1: RGB = (0x42, 0x27, 0x5a);
+const GRAD_COLOR_2: RGB = (0x73, 0x4b, 0x6d);
 
-const DEFAULT_EASING: Easing = Easing::QuadraticEaseOut;
+const DEFAULT_EASING: Easing = Easing::BounceOut;
 
 #[derive(Copy, Clone)]
-enum Easing {
+pub enum Easing {
     Linear,
     BounceOut,
     Oscillate,
@@ -109,21 +109,21 @@ impl Remainder {
 struct TickSpan(usize, Remainder);
 
 impl TickSpan {
-    pub fn as_ticks(&self) -> usize {
-        (self.0 * 8) + self.1.as_ticks()
-    }
+    // pub fn as_ticks(&self) -> usize {
+    //     (self.0 * 8) + self.1.as_ticks()
+    // }
 
     pub fn from_ticks(t: usize) -> Self {
         Self(t / 8, Remainder::from_ticks(t))
     }
 
-    pub fn from_num_chars(n: usize) -> Self {
-        Self(n, Remainder::E0)
-    }
+    // pub fn from_num_chars(n: usize) -> Self {
+    //     Self(n, Remainder::E0)
+    // }
 
-    pub fn chars_needed(&self) -> usize {
-        self.0 + if self.1.as_ticks() == 0 { 0 } else { 1 }
-    }
+    // pub fn chars_needed(&self) -> usize {
+    //     self.0 + if self.1.as_ticks() == 0 { 0 } else { 1 }
+    // }
 }
 
 #[derive(Copy, Clone)]
@@ -188,8 +188,8 @@ impl From<(Remainder, Direction)> for BlockChar {
 #[derive(Copy, Clone)]
 enum Direction { Right, Up, /* Left, Down, */ }
 
-#[derive(Copy, Clone)]
-enum TipSmoothing { PartialBlocks, Fade }
+// #[derive(Copy, Clone)]
+// enum TipSmoothing { PartialBlocks, Fade }
 
 struct BlockLine(Vec<BlockChar>);
 
@@ -213,74 +213,50 @@ impl BlockLine {
     }
 }
 
-fn interpolate_rgb(rgb_a: RGB, rgb_b: RGB, curr: usize, max: usize) -> RGB {
-    let f = (curr as f64 / max as f64).clamp(0.0, 1.0);
-    (
-        ((1.0 - f) * rgb_a.0 as f64 + f * rgb_b.0 as f64).round() as u8,
-        ((1.0 - f) * rgb_a.1 as f64 + f * rgb_b.1 as f64).round() as u8,
-        ((1.0 - f) * rgb_a.2 as f64 + f * rgb_b.2 as f64).round() as u8,
-    )
-}
-
-struct GradientColorIter {
-    color_a: RGB,
-    color_b: RGB,
-    n: usize,
-    curr_step: usize,
-}
-
-impl GradientColorIter {
-    pub fn new(color_a: RGB, color_b: RGB, n: usize) -> Self {
-        Self {
-            color_a,
-            color_b,
-            n,
-            curr_step: 0,
-        }
-    }
-}
-
-impl Iterator for GradientColorIter {
-    type Item = RGB;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.curr_step < self.n {
-            let ret = Some(
-                if self.color_a != self.color_b && self.n > 1 {
-                    interpolate_rgb(self.color_a, self.color_b, self.curr_step, self.n - 1)
-                } else { self.color_a }
-            );
-            self.curr_step += 1;
-            ret
-        } else { None }
-    }
-}
-
-struct GradientBlockLine(Vec<(BlockChar, ColorStyle)>);
-
-impl GradientBlockLine {
-    pub fn new(ts: TickSpan, max_blocks: usize, direction: Direction, color_a: RGB, color_b: RGB) -> Self {
-        let gradient_color_iter =
-            GradientColorIter::new(color_a, color_b, max_blocks)
-            .map(|rgb| {
-                ColorStyle {
-                    front: ColorType::Color(Color::Rgb(rgb.0, rgb.1, rgb.2)),
-                    back: ColorType::Palette(PaletteColor::View),
-                }
-            })
-        ;
-        let block_line = BlockLine::new(ts, max_blocks, direction);
-
-        Self(block_line.0.into_iter().zip(gradient_color_iter).collect())
-    }
-}
-
-impl IntoIterator for GradientBlockLine {
-    type Item = (BlockChar, ColorStyle);
+impl IntoIterator for BlockLine {
+    type Item = BlockChar;
     type IntoIter = ::std::vec::IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
+    }
+}
+
+struct GradientRange(Vec<RGB>);
+
+impl GradientRange {
+    pub fn new(color_a: RGB, color_b: RGB, n: usize) -> Self {
+        if color_a == color_b {
+            GradientRange(vec![color_a; n])
+        } else if n == 0 {
+            GradientRange(vec![])
+        } else if n == 1 {
+            GradientRange(vec![color_a])
+        } else {
+            let mut v: Vec<RGB> = Vec::with_capacity(n);
+            let max_den = n - 1;
+            for i in 0..=max_den {
+                let f = i as f64 / max_den as f64;
+                let new_color = (
+                    ((1.0 - f) * color_a.0 as f64 + f * color_b.0 as f64).round() as u8,
+                    ((1.0 - f) * color_a.1 as f64 + f * color_b.1 as f64).round() as u8,
+                    ((1.0 - f) * color_a.2 as f64 + f * color_b.2 as f64).round() as u8,
+                );
+
+                v.push(new_color);
+            }
+
+            GradientRange(v)
+        }
+    }
+}
+
+impl<'a> IntoIterator for &'a GradientRange {
+    type Item = &'a RGB;
+    type IntoIter = ::std::slice::Iter<'a, RGB>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        (&self.0).into_iter()
     }
 }
 
@@ -293,22 +269,40 @@ struct ModelData {
 
 type Model = Arc<Mutex<ModelData>>;
 
-fn build_spectrum_view(model: Model, size: Vec2) -> impl cursive::view::View {
+fn build_spectrum_view(model: Model) -> impl cursive::view::View {
+    let gradient_range = GradientRange::new(GRAD_COLOR_1, GRAD_COLOR_2, MAX_BAR_LENGTH);
     Canvas::new(model)
-        .with_draw(|model, printer| {
+        .with_draw(move |model, printer| {
             let model = model.lock().unwrap();
 
             let eased_ticks = DEFAULT_EASING.pos(model.lin_ticks, MAX_BAR_LENGTH * 8);
 
-            let line = GradientBlockLine::new(
+            let block_line = BlockLine::new(
                 TickSpan::from_ticks(eased_ticks),
                 MAX_BAR_LENGTH,
                 Direction::Right,
-                GRAD_COLOR_1,
-                GRAD_COLOR_2,
             );
 
-            for (i, (bc, cs)) in line.into_iter().enumerate() {
+            let gradient_color_style_iter =
+                (&gradient_range)
+                .into_iter()
+                .map(|rgb| {
+                    ColorStyle {
+                        front: ColorType::Color(Color::Rgb(rgb.0, rgb.1, rgb.2)),
+                        back: ColorType::Palette(PaletteColor::View),
+                    }
+                })
+            ;
+
+            // let line = GradientBlockLine::new(
+            //     TickSpan::from_ticks(eased_ticks),
+            //     MAX_BAR_LENGTH,
+            //     Direction::Right,
+            //     GRAD_COLOR_1,
+            //     GRAD_COLOR_2,
+            // );
+
+            for (i, (bc, cs)) in block_line.into_iter().zip(gradient_color_style_iter).enumerate() {
                 printer.with_color(
                     cs,
                     |p| p.print((i, 0), bc.into()),
@@ -316,7 +310,7 @@ fn build_spectrum_view(model: Model, size: Vec2) -> impl cursive::view::View {
             }
         })
         // The required size will be set by the window layout, not by the printer!
-        .with_required_size(move |_model, _req_size| size)
+        .with_required_size(move |_model, _req_size| Vec2::new(MAX_BAR_LENGTH, 2))
         .scrollable()
 }
 
@@ -332,7 +326,7 @@ fn begin_counting(model: Model) {
                     .unwrap();
                 model.lin_ticks += 1;
             }
-            std::thread::sleep(Duration::from_millis(5));
+            std::thread::sleep(Duration::from_millis(2));
         }
     });
 }
@@ -351,7 +345,7 @@ pub fn run() {
     // Build the UI from the model
     siv.add_layer(
         Dialog::around(
-            build_spectrum_view(Arc::clone(&model), Vec2::new(200, 2))
+            build_spectrum_view(Arc::clone(&model))
         )
     );
 
