@@ -4,6 +4,7 @@ use std::time::Duration;
 use std::cmp::Ordering;
 
 use cursive::Vec2;
+use cursive::Printer;
 use cursive::views::Canvas;
 use cursive::views::Dialog;
 use cursive::traits::Scrollable;
@@ -12,7 +13,7 @@ use cursive::theme::ColorType;
 use cursive::theme::ColorStyle;
 use cursive::theme::PaletteColor;
 
-const MAX_BAR_LENGTH: usize = 200;
+const MAX_BAR_LENGTH: usize = 256;
 
 const GRAD_COLOR_1: RGB = (0x42, 0x27, 0x5a);
 const GRAD_COLOR_2: RGB = (0x73, 0x4b, 0x6d);
@@ -107,26 +108,6 @@ impl Remainder {
     }
 }
 
-struct TickSpan(usize, Remainder);
-
-impl TickSpan {
-    // pub fn as_8ths(&self) -> usize {
-    //     (self.0 * 8) + self.1.as_8ths()
-    // }
-
-    pub fn from_8ths(t: usize) -> Self {
-        Self(t / 8, Remainder::from_8ths(t))
-    }
-
-    // pub fn from_num_chars(n: usize) -> Self {
-    //     Self(n, Remainder::E0)
-    // }
-
-    // pub fn chars_needed(&self) -> usize {
-    //     self.0 + if self.1.as_8ths() == 0 { 0 } else { 1 }
-    // }
-}
-
 #[derive(Copy, Clone)]
 enum BlockChar {
     NL,
@@ -138,7 +119,7 @@ enum BlockChar {
 }
 
 impl BlockChar {
-    fn needs_inversion(&self) -> bool {
+    fn _needs_inversion(&self) -> bool {
         match self {
             &BlockChar::L1 => true,
             &BlockChar::L2 => true,
@@ -232,39 +213,39 @@ enum Direction { Right, Up, Left, Down, }
 // #[derive(Copy, Clone)]
 // enum TipSmoothing { PartialBlocks, Fade }
 
-struct BlockLine(Vec<BlockChar>);
+// struct OldBlockLine(Vec<BlockChar>);
 
-impl BlockLine {
-    pub fn new(ts: TickSpan, max_blocks: usize, direction: Direction) -> Self {
-        if ts.0 >= max_blocks {
-            Self(vec![BlockChar::FF; max_blocks])
-        } else if ts.0 == 0 && ts.1 == Remainder::E0 {
-            Self(vec![BlockChar::NL; max_blocks])
-        } else {
-            let mut blocks = Vec::<BlockChar>::with_capacity(max_blocks);
+// impl OldBlockLine {
+//     pub fn new(ts: TickSpan, max_blocks: usize, direction: Direction) -> Self {
+//         if ts.0 >= max_blocks {
+//             Self(vec![BlockChar::FF; max_blocks])
+//         } else if ts.0 == 0 && ts.1 == Remainder::E0 {
+//             Self(vec![BlockChar::NL; max_blocks])
+//         } else {
+//             let mut blocks = Vec::<BlockChar>::with_capacity(max_blocks);
 
-            for _ in 0..ts.0 { blocks.push(BlockChar::FF); }
-            blocks.push(BlockChar::from((ts.1, direction)));
-            for _ in 0..(max_blocks - ts.0 - 1) { blocks.push(BlockChar::NL); }
+//             for _ in 0..ts.0 { blocks.push(BlockChar::FF); }
+//             blocks.push(BlockChar::from((ts.1, direction)));
+//             for _ in 0..(max_blocks - ts.0 - 1) { blocks.push(BlockChar::NL); }
 
-            assert_eq!(max_blocks, blocks.len());
+//             assert_eq!(max_blocks, blocks.len());
 
-            Self(blocks)
-        }
-    }
-}
+//             Self(blocks)
+//         }
+//     }
+// }
 
-impl IntoIterator for BlockLine {
-    type Item = BlockChar;
-    type IntoIter = ::std::vec::IntoIter<Self::Item>;
+// impl IntoIterator for OldBlockLine {
+//     type Item = BlockChar;
+//     type IntoIter = ::std::vec::IntoIter<Self::Item>;
 
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
-    }
-}
+//     fn into_iter(self) -> Self::IntoIter {
+//         self.0.into_iter()
+//     }
+// }
 
 #[derive(Copy, Clone)]
-struct VBlockLine {
+struct BlockLine {
     /// Number of filled blocks.
     pub filled_blocks: usize,
 
@@ -276,16 +257,16 @@ struct VBlockLine {
     pub dir: Direction,
 }
 
-impl VBlockLine {
+impl BlockLine {
     pub fn char_len(&self) -> usize {
         self.filled_blocks + if let Some((_, empty_blocks)) = self.tail { 1 + empty_blocks } else { 0 }
     }
 
-    // pub fn rem(&self) -> Remainder {
-    //     if let Some((rem, _)) = self.tail { rem }
-    //     // A full block line has a remainder of 0.
-    //     else { Remainder::E0 }
-    // }
+    pub fn _rem(&self) -> Remainder {
+        if let Some((rem, _)) = self.tail { rem }
+        // A full block line has a remainder of 0.
+        else { Remainder::E0 }
+    }
 
     pub fn char_at(&self, index: usize) -> BlockChar {
         match (index.cmp(&self.filled_blocks), self.tail) {
@@ -297,28 +278,31 @@ impl VBlockLine {
 
     pub fn from_len_and_8ths(max_len: usize, filled_8ths: usize, dir: Direction) -> Self {
         let filled_blocks = filled_8ths / 8;
-        if filled_blocks >= max_len {
-            Self {
+        let res = if filled_blocks >= max_len {
+            BlockLine {
                 filled_blocks: max_len,
                 tail: None,
                 dir,
             }
         } else {
-            Self {
+            BlockLine {
                 filled_blocks,
                 tail: Some((Remainder::from_8ths(filled_8ths), max_len - filled_blocks - 1)),
                 dir,
             }
-        }
+        };
+
+        assert_eq!(max_len, res.char_len());
+        res
     }
 }
 
-impl IntoIterator for VBlockLine {
+impl IntoIterator for BlockLine {
     type Item = BlockChar;
-    type IntoIter = VBlockLineIter;
+    type IntoIter = BlockLineIter;
 
     fn into_iter(self) -> Self::IntoIter {
-        VBlockLineIter {
+        BlockLineIter {
             block_line: self,
             curr_ch_idx: 0,
         }
@@ -326,12 +310,12 @@ impl IntoIterator for VBlockLine {
 }
 
 #[derive(Copy, Clone)]
-struct VBlockLineIter {
-    block_line: VBlockLine,
+struct BlockLineIter {
+    block_line: BlockLine,
     curr_ch_idx: usize
 }
 
-impl Iterator for VBlockLineIter {
+impl Iterator for BlockLineIter {
     type Item = BlockChar;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -343,18 +327,26 @@ impl Iterator for VBlockLineIter {
     }
 }
 
-struct GradientRange(Vec<RGB>);
+struct GradientRange(Vec<ColorStyle>);
 
 impl GradientRange {
     pub fn new(color_a: RGB, color_b: RGB, n: usize) -> Self {
         if color_a == color_b {
-            GradientRange(vec![color_a; n])
+            let cs_a = ColorStyle {
+                front: ColorType::Color(Color::Rgb(color_a.0, color_a.1, color_a.2)),
+                back: ColorType::Palette(PaletteColor::View),
+            };
+            GradientRange(vec![cs_a; n])
         } else if n == 0 {
             GradientRange(vec![])
         } else if n == 1 {
-            GradientRange(vec![color_a])
+            let cs_a = ColorStyle {
+                front: ColorType::Color(Color::Rgb(color_a.0, color_a.1, color_a.2)),
+                back: ColorType::Palette(PaletteColor::View),
+            };
+            GradientRange(vec![cs_a])
         } else {
-            let mut v: Vec<RGB> = Vec::with_capacity(n);
+            let mut v: Vec<_> = Vec::with_capacity(n);
             let max_den = n - 1;
             for i in 0..=max_den {
                 let f = i as f64 / max_den as f64;
@@ -364,7 +356,12 @@ impl GradientRange {
                     ((1.0 - f) * color_a.2 as f64 + f * color_b.2 as f64).round() as u8,
                 );
 
-                v.push(new_color);
+                let new_cs = ColorStyle {
+                    front: ColorType::Color(Color::Rgb(new_color.0, new_color.1, new_color.2)),
+                    back: ColorType::Palette(PaletteColor::View),
+                };
+
+                v.push(new_cs);
             }
 
             GradientRange(v)
@@ -373,8 +370,8 @@ impl GradientRange {
 }
 
 impl<'a> IntoIterator for &'a GradientRange {
-    type Item = &'a RGB;
-    type IntoIter = ::std::slice::Iter<'a, RGB>;
+    type Item = &'a ColorStyle;
+    type IntoIter = ::std::slice::Iter<'a, ColorStyle>;
 
     fn into_iter(self) -> Self::IntoIter {
         (&self.0).into_iter()
@@ -390,6 +387,18 @@ struct ModelData {
 
 type Model = Arc<Mutex<ModelData>>;
 
+// fn print_gradient_line<'a>(
+//     printer: &Printer,
+//     x: usize,
+//     y: usize,
+//     gradient_range: &'a GradientRange,
+//     max_len: usize,
+//     num_8ths: usize,
+//     dir: Direction,
+// ) {
+
+// }
+
 fn build_spectrum_view(model: Model) -> impl cursive::view::View {
     let gradient_range = GradientRange::new(GRAD_COLOR_1, GRAD_COLOR_2, MAX_BAR_LENGTH);
     Canvas::new(model)
@@ -398,22 +407,17 @@ fn build_spectrum_view(model: Model) -> impl cursive::view::View {
 
             let eased_8ths = DEFAULT_EASING.pos(model.lin_8ths, MAX_BAR_LENGTH * 8);
 
-            let block_line = BlockLine::new(
-                TickSpan::from_8ths(eased_8ths),
+            // let block_line = OldBlockLine::new(
+            //     TickSpan::from_8ths(eased_8ths),
+            //     MAX_BAR_LENGTH,
+            //     Direction::Right,
+            // );
+
+            let block_line = BlockLine::from_len_and_8ths(
                 MAX_BAR_LENGTH,
+                eased_8ths,
                 Direction::Right,
             );
-
-            let gradient_color_style_iter =
-                (&gradient_range)
-                .into_iter()
-                .map(|rgb| {
-                    ColorStyle {
-                        front: ColorType::Color(Color::Rgb(rgb.0, rgb.1, rgb.2)),
-                        back: ColorType::Palette(PaletteColor::View),
-                    }
-                })
-            ;
 
             // let line = GradientBlockLine::new(
             //     TickSpan::from_8ths(eased_8ths),
@@ -423,9 +427,9 @@ fn build_spectrum_view(model: Model) -> impl cursive::view::View {
             //     GRAD_COLOR_2,
             // );
 
-            for (i, (bc, cs)) in block_line.into_iter().zip(gradient_color_style_iter).enumerate() {
+            for (i, (bc, cs)) in block_line.into_iter().zip(&gradient_range).enumerate() {
                 printer.with_color(
-                    cs,
+                    *cs,
                     |p| p.print((i, 0), bc.into()),
                 );
             }
