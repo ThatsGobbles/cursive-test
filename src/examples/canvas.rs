@@ -387,17 +387,32 @@ struct ModelData {
 
 type Model = Arc<Mutex<ModelData>>;
 
-// fn print_gradient_line<'a>(
-//     printer: &Printer,
-//     x: usize,
-//     y: usize,
-//     gradient_range: &'a GradientRange,
-//     max_len: usize,
-//     num_8ths: usize,
-//     dir: Direction,
-// ) {
+fn print_gradient_line<'a>(
+    printer: &Printer,
+    x: usize,
+    y: usize,
+    gradient_range: &'a GradientRange,
+    max_len: usize,
+    num_8ths: usize,
+    dir: Direction,
+) {
+    let block_line = BlockLine::from_len_and_8ths(
+        max_len,
+        num_8ths,
+        dir,
+    );
 
-// }
+    for (i, (bc, cs)) in block_line.into_iter().zip(gradient_range).enumerate() {
+        let (tcs, tx, ty) = match dir {
+            _ => (*cs, x + i, y),
+        };
+
+        printer.with_color(
+            tcs,
+            |p| p.print((tx, ty), bc.into()),
+        );
+    }
+}
 
 fn build_spectrum_view(model: Model) -> impl cursive::view::View {
     let gradient_range = GradientRange::new(GRAD_COLOR_1, GRAD_COLOR_2, MAX_BAR_LENGTH);
@@ -407,32 +422,19 @@ fn build_spectrum_view(model: Model) -> impl cursive::view::View {
 
             let eased_8ths = DEFAULT_EASING.pos(model.lin_8ths, MAX_BAR_LENGTH * 8);
 
-            // let block_line = OldBlockLine::new(
-            //     TickSpan::from_8ths(eased_8ths),
+            // let block_line = BlockLine::from_len_and_8ths(
             //     MAX_BAR_LENGTH,
+            //     eased_8ths,
             //     Direction::Right,
             // );
 
-            let block_line = BlockLine::from_len_and_8ths(
-                MAX_BAR_LENGTH,
-                eased_8ths,
-                Direction::Right,
-            );
-
-            // let line = GradientBlockLine::new(
-            //     TickSpan::from_8ths(eased_8ths),
-            //     MAX_BAR_LENGTH,
-            //     Direction::Right,
-            //     GRAD_COLOR_1,
-            //     GRAD_COLOR_2,
-            // );
-
-            for (i, (bc, cs)) in block_line.into_iter().zip(&gradient_range).enumerate() {
-                printer.with_color(
-                    *cs,
-                    |p| p.print((i, 0), bc.into()),
-                );
-            }
+            // for (i, (bc, cs)) in block_line.into_iter().zip(&gradient_range).enumerate() {
+            //     printer.with_color(
+            //         *cs,
+            //         |p| p.print((i, 0), bc.into()),
+            //     );
+            // }
+            print_gradient_line(&printer, 0, 0, &gradient_range, MAX_BAR_LENGTH, eased_8ths, Direction::Right);
         })
         // The required size will be set by the window layout, not by the printer!
         .with_required_size(move |_model, _req_size| Vec2::new(MAX_BAR_LENGTH, 2))
@@ -451,7 +453,7 @@ fn begin_counting(model: Model) {
                     .unwrap();
                 model.lin_8ths += 1;
             }
-            std::thread::sleep(Duration::from_millis(2));
+            std::thread::sleep(Duration::from_millis(1));
         }
     });
 }
