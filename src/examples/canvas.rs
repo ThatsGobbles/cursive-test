@@ -13,7 +13,7 @@ use cursive::theme::ColorType;
 use cursive::theme::ColorStyle;
 use cursive::theme::PaletteColor;
 
-const MAX_BAR_LENGTH: usize = 256;
+const MAX_BAR_LENGTH: usize = 60;
 
 const GRAD_COLOR_1: RGB = (0x42, 0x27, 0x5a);
 const GRAD_COLOR_2: RGB = (0x73, 0x4b, 0x6d);
@@ -119,7 +119,7 @@ enum BlockChar {
 }
 
 impl BlockChar {
-    fn _needs_inversion(&self) -> bool {
+    fn needs_inversion(&self) -> bool {
         match self {
             &BlockChar::L1 => true,
             &BlockChar::L2 => true,
@@ -212,37 +212,6 @@ enum Direction { Right, Up, Left, Down, }
 
 // #[derive(Copy, Clone)]
 // enum TipSmoothing { PartialBlocks, Fade }
-
-// struct OldBlockLine(Vec<BlockChar>);
-
-// impl OldBlockLine {
-//     pub fn new(ts: TickSpan, max_blocks: usize, direction: Direction) -> Self {
-//         if ts.0 >= max_blocks {
-//             Self(vec![BlockChar::FF; max_blocks])
-//         } else if ts.0 == 0 && ts.1 == Remainder::E0 {
-//             Self(vec![BlockChar::NL; max_blocks])
-//         } else {
-//             let mut blocks = Vec::<BlockChar>::with_capacity(max_blocks);
-
-//             for _ in 0..ts.0 { blocks.push(BlockChar::FF); }
-//             blocks.push(BlockChar::from((ts.1, direction)));
-//             for _ in 0..(max_blocks - ts.0 - 1) { blocks.push(BlockChar::NL); }
-
-//             assert_eq!(max_blocks, blocks.len());
-
-//             Self(blocks)
-//         }
-//     }
-// }
-
-// impl IntoIterator for OldBlockLine {
-//     type Item = BlockChar;
-//     type IntoIter = ::std::vec::IntoIter<Self::Item>;
-
-//     fn into_iter(self) -> Self::IntoIter {
-//         self.0.into_iter()
-//     }
-// }
 
 #[derive(Copy, Clone)]
 struct BlockLine {
@@ -387,6 +356,13 @@ struct ModelData {
 
 type Model = Arc<Mutex<ModelData>>;
 
+fn invert_color_style(cs: ColorStyle) -> ColorStyle {
+    ColorStyle {
+        front: cs.back,
+        back: cs.front,
+    }
+}
+
 fn print_gradient_line<'a>(
     printer: &Printer,
     x: usize,
@@ -403,14 +379,19 @@ fn print_gradient_line<'a>(
     );
 
     for (i, (bc, cs)) in block_line.into_iter().zip(gradient_range).enumerate() {
-        let (tcs, tx, ty) = match dir {
-            _ => (*cs, x + i, y),
+        let cs = {
+            if bc.needs_inversion() { invert_color_style(*cs) }
+            else { *cs }
         };
 
-        printer.with_color(
-            tcs,
-            |p| p.print((tx, ty), bc.into()),
-        );
+        let (tx, ty) = match dir {
+            Direction::Right => (x + i, y),
+            Direction::Left => (x + (max_len - i) - 1, y),
+            Direction::Down => (x, y + i),
+            Direction::Up => (x, y + (max_len - i) - 1),
+        };
+
+        printer.with_color(cs, |p| p.print((tx, ty), bc.into()));
     }
 }
 
@@ -422,22 +403,13 @@ fn build_spectrum_view(model: Model) -> impl cursive::view::View {
 
             let eased_8ths = DEFAULT_EASING.pos(model.lin_8ths, MAX_BAR_LENGTH * 8);
 
-            // let block_line = BlockLine::from_len_and_8ths(
-            //     MAX_BAR_LENGTH,
-            //     eased_8ths,
-            //     Direction::Right,
-            // );
-
-            // for (i, (bc, cs)) in block_line.into_iter().zip(&gradient_range).enumerate() {
-            //     printer.with_color(
-            //         *cs,
-            //         |p| p.print((i, 0), bc.into()),
-            //     );
-            // }
-            print_gradient_line(&printer, 0, 0, &gradient_range, MAX_BAR_LENGTH, eased_8ths, Direction::Right);
+            // print_gradient_line(&printer, 0, 0, &gradient_range, MAX_BAR_LENGTH, eased_8ths, Direction::Right);
+            // print_gradient_line(&printer, 0, 1, &gradient_range, MAX_BAR_LENGTH, eased_8ths, Direction::Left);
+            print_gradient_line(&printer, 0, 0, &gradient_range, MAX_BAR_LENGTH, eased_8ths, Direction::Up);
+            print_gradient_line(&printer, 1, 0, &gradient_range, MAX_BAR_LENGTH, eased_8ths, Direction::Down);
         })
         // The required size will be set by the window layout, not by the printer!
-        .with_required_size(move |_model, _req_size| Vec2::new(MAX_BAR_LENGTH, 2))
+        .with_required_size(move |_model, _req_size| Vec2::new(MAX_BAR_LENGTH, MAX_BAR_LENGTH))
         .scrollable()
 }
 
@@ -453,7 +425,7 @@ fn begin_counting(model: Model) {
                     .unwrap();
                 model.lin_8ths += 1;
             }
-            std::thread::sleep(Duration::from_millis(1));
+            std::thread::sleep(Duration::from_millis(10));
         }
     });
 }
