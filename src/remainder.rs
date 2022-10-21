@@ -1,6 +1,13 @@
 #[derive(Copy, Clone, PartialEq, PartialOrd, Ord, Eq, Debug)]
 pub enum Remainder {
-    E0, E1, E2, E3, E4, E5, E6, E7,
+    E0,
+    E1,
+    E2,
+    E3,
+    E4,
+    E5,
+    E6,
+    E7,
 }
 
 impl Remainder {
@@ -65,7 +72,7 @@ mod tests {
         let mut expected_cycle = ORDER.into_iter().cycle();
 
         for i in 0..=(CYCLES * 8) {
-            let expected = *expected_cycle.next().unwrap();
+            let expected = expected_cycle.next().unwrap();
             let produced = Remainder::from_8ths(i);
 
             assert_eq!(expected, produced);

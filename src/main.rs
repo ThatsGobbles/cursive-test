@@ -1,5 +1,3 @@
-#![feature(clamp)]
-
 pub mod block_char;
 pub mod block_line;
 pub mod direction;
@@ -11,12 +9,13 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use cursive::Vec2;
-use cursive::Printer;
+use cursive::theme::ColorStyle;
+use cursive::traits::Scrollable;
 use cursive::views::Canvas;
 use cursive::views::Dialog;
-use cursive::traits::Scrollable;
-use cursive::theme::ColorStyle;
+use cursive::CursiveExt;
+use cursive::Printer;
+use cursive::Vec2;
 
 use crate::block_line::BlockLine;
 use crate::direction::Direction;
@@ -55,16 +54,15 @@ fn print_gradient_line<'a>(
     num_8ths: usize,
     dir: Direction,
 ) {
-    let block_line = BlockLine::from_len_and_8ths(
-        max_len,
-        num_8ths,
-        dir,
-    );
+    let block_line = BlockLine::from_len_and_8ths(max_len, num_8ths, dir);
 
     for (i, (bc, cs)) in block_line.into_iter().zip(gradient_range).enumerate() {
         let cs = {
-            if bc.needs_inversion() { invert_color_style(*cs) }
-            else { *cs }
+            if bc.needs_inversion() {
+                invert_color_style(*cs)
+            } else {
+                *cs
+            }
         };
 
         let (tx, ty) = match dir {
@@ -86,10 +84,42 @@ fn build_spectrum_view(model: Model) -> impl cursive::view::View {
 
             let eased_8ths = DEFAULT_EASING.pos(model.lin_8ths, MAX_BAR_LENGTH * 8);
 
-            print_gradient_line(&printer, 0, 0, &gradient_range, MAX_BAR_LENGTH, eased_8ths, Direction::Right);
-            print_gradient_line(&printer, 0, 1, &gradient_range, MAX_BAR_LENGTH, eased_8ths, Direction::Left);
-            print_gradient_line(&printer, 0, 0, &gradient_range, MAX_BAR_LENGTH, eased_8ths, Direction::Up);
-            print_gradient_line(&printer, 1, 0, &gradient_range, MAX_BAR_LENGTH, eased_8ths, Direction::Down);
+            print_gradient_line(
+                &printer,
+                0,
+                0,
+                &gradient_range,
+                MAX_BAR_LENGTH,
+                eased_8ths,
+                Direction::Right,
+            );
+            print_gradient_line(
+                &printer,
+                0,
+                1,
+                &gradient_range,
+                MAX_BAR_LENGTH,
+                eased_8ths,
+                Direction::Left,
+            );
+            print_gradient_line(
+                &printer,
+                0,
+                0,
+                &gradient_range,
+                MAX_BAR_LENGTH,
+                eased_8ths,
+                Direction::Up,
+            );
+            print_gradient_line(
+                &printer,
+                1,
+                0,
+                &gradient_range,
+                MAX_BAR_LENGTH,
+                eased_8ths,
+                Direction::Down,
+            );
         })
         // The required size will be set by the window layout, not by the printer!
         .with_required_size(move |_model, _req_size| Vec2::new(MAX_BAR_LENGTH, MAX_BAR_LENGTH))
@@ -97,19 +127,19 @@ fn build_spectrum_view(model: Model) -> impl cursive::view::View {
 }
 
 fn begin_counting(model: Model) {
-    std::thread::spawn(move || {
-        loop {
-            {
-                let mut model = model.lock().unwrap();
-                if model.lin_8ths > MAX_BAR_LENGTH * 8 { break; }
-                model
-                    .cb_sink
-                    .send(Box::new(cursive::Cursive::noop))
-                    .unwrap();
-                model.lin_8ths += 1;
+    std::thread::spawn(move || loop {
+        {
+            let mut model = model.lock().unwrap();
+            if model.lin_8ths > MAX_BAR_LENGTH * 8 {
+                break;
             }
-            std::thread::sleep(Duration::from_millis(10));
+            model
+                .cb_sink
+                .send(Box::new(cursive::Cursive::noop))
+                .unwrap();
+            model.lin_8ths += 1;
         }
+        std::thread::sleep(Duration::from_millis(5));
     });
 }
 
@@ -125,11 +155,7 @@ pub fn main() {
     }));
 
     // Build the UI from the model
-    siv.add_layer(
-        Dialog::around(
-            build_spectrum_view(Arc::clone(&model))
-        )
-    );
+    siv.add_layer(Dialog::around(build_spectrum_view(Arc::clone(&model))));
 
     begin_counting(Arc::clone(&model));
 

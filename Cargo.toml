@@ -1,11 +1,13 @@
 [package]
+authors = ["Mark LeMoine <linclelinkpart5@gmail.com>"]
+edition = "2021"
 name = "cursive-test"
 version = "0.1.0"
-authors = ["Mark LeMoine <thatsgobbles@gmail.com>"]
-edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cursive = { version = "0.12", default-features = false, features = ["termion-backend"] }
+cursive = { version = "0.20", default-features = false, features = [
+    "termion-backend",
+] }
 rand = "*"
