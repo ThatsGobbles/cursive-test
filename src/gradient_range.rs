@@ -1,8 +1,101 @@
-
 use cursive::theme::Color;
-use cursive::theme::ColorType;
 use cursive::theme::ColorStyle;
+use cursive::theme::ColorType;
 use cursive::theme::PaletteColor;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RGB {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct GRange {
+    rgb_0: RGB,
+    rgb_1: RGB,
+    n: usize,
+}
+
+impl GRange {
+    pub fn new(a: RGB, b: RGB, num_steps: usize) -> Self {
+        Self {
+            rgb_0: a,
+            rgb_1: b,
+            n: num_steps,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.n
+    }
+
+    pub fn get(&self, i: usize) -> Option<ColorStyle> {
+        if i >= self.n {
+            return None;
+        }
+
+        let cs = if self.n == 1 {
+            ColorStyle {
+                front: ColorType::Color(Color::Rgb(self.rgb_0.r, self.rgb_0.g, self.rgb_0.b)),
+                back: ColorType::Palette(PaletteColor::View),
+            }
+        } else {
+            let max_den = self.n - 1;
+
+            // Calculate the intermediate color using linear interpolation.
+            let f = i as f64 / max_den as f64;
+            let interp = RGB {
+                r: ((1.0 - f) * self.rgb_0.r as f64 + f * self.rgb_1.r as f64).round() as u8,
+                g: ((1.0 - f) * self.rgb_0.g as f64 + f * self.rgb_1.g as f64).round() as u8,
+                b: ((1.0 - f) * self.rgb_0.b as f64 + f * self.rgb_1.b as f64).round() as u8,
+            };
+
+            ColorStyle {
+                front: ColorType::Color(Color::Rgb(interp.r, interp.g, interp.b)),
+                back: ColorType::Palette(PaletteColor::View),
+            }
+        };
+
+        Some(cs)
+    }
+}
+
+pub struct GRangeIter {
+    g_range: GRange,
+    state: Option<usize>,
+}
+
+impl GRangeIter {
+    pub fn new(g_range: GRange) -> Self {
+        Self {
+            g_range,
+            state: Some(0),
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.state = Some(0);
+    }
+}
+
+impl Iterator for GRangeIter {
+    type Item = ColorStyle;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.state.and_then(|i| {
+            let ret = self.g_range.get(i);
+
+            if ret.is_some() {
+                self.state = i.checked_add(1);
+            } else {
+                self.state = None;
+            }
+
+            ret
+        })
+    }
+}
 
 pub struct GradientRange(Vec<ColorStyle>);
 
